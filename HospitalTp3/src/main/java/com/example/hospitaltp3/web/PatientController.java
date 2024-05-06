@@ -3,11 +3,14 @@ package com.example.hospitaltp3.web;
 
 import com.example.hospitaltp3.entitites.Patient;
 import com.example.hospitaltp3.repositories.PatientRepository;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,47 +21,52 @@ import java.util.List;
 @Controller
 @AllArgsConstructor
 public class PatientController {
+
     private PatientRepository patientRepository;
-    @GetMapping("/api/index")
-    public String index(Model model)
-    {
-        List<Patient> patientList= patientRepository.findAll();
-        model.addAttribute("patientList",patientList);
+    @GetMapping("/user/index")
+    public String index(Model model, @RequestParam(name="page",defaultValue = "0") int page,
+                        @RequestParam(name="size",defaultValue = "4") int size,
+                        @RequestParam(name="keyword",defaultValue = "") String kw){
+        Page<Patient> pagePatients=patientRepository.findByNomContains(kw,PageRequest.of(page,size));
+        model.addAttribute("listPatients",pagePatients.getContent());
+        model.addAttribute("pages",new int[pagePatients.getTotalPages()]);
+        model.addAttribute("currentPage",page);
+        model.addAttribute("keyword",kw);
         return "patients";
     }
-    @GetMapping("/api/index2")
-    public String index2(Model model,
-                         @RequestParam(name = "page",defaultValue = "0") int page,
-                         @RequestParam(name = "size",defaultValue = "8") int size,
-                         @RequestParam(name="search",defaultValue = "") String search)
-    {
 
-        Page<Patient> patientPage = patientRepository.findByNomContains(search,PageRequest.of(page,size));
-        model.addAttribute("patientList",patientPage.getContent());
-        model.addAttribute("pages",new int[patientPage.getTotalPages()]);
-        model.addAttribute("currentpage",page);
-        model.addAttribute("searchpages",search);
-        return "patients";
+    @GetMapping("/admin/delete")
+    @PreAuthorize("hasRole('ROLE_ADDMIN')")
+    public String delete(Long id, String keyword, int page){
+        patientRepository.deleteById(id);
+        return "redirect:/user/index?page="+page+"&keyword="+keyword;
     }
-    @GetMapping("/api/delete")
-     public String delete(Long id,int page,String search)
-     {
-         patientRepository.delete(patientRepository.findById(id).get());
-         return "redirect:/api/index2?page="+page+"&search="+search;
-     }
-@GetMapping("/api/update")
-     public String Update(Long id,Model model)
-     {
-         Patient p1 = patientRepository.findById(id).get();
-         model.addAttribute("patient",p1);
-         return "Update";
-     }
-
-     @PostMapping("/api/save")
-     public String save(Long id,Patient patient)
-     {
+    @GetMapping("/admin/formPatients")
+    @PreAuthorize("hasRole('ROLE_ADDMIN')")
+    public String formPatients(Model model){
+        model.addAttribute("patient",new Patient());
+        return "formPatients";
+    }
+    @PostMapping(path="/admin/save")
+    @PreAuthorize("hasRole('ROLE_ADDMIN')")
+    public String save(Model model, @Valid Patient patient, BindingResult bindingResult,
+                       @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "") String keyword){
+        if(bindingResult.hasErrors()) return "formPatients";
         patientRepository.save(patient);
-//         return "redirect:/api/update?id="+id;
-         return "redirect:/api/index2";
-     }
+        return "redirect:/user/index?page="+page+"&keyword="+keyword;
+    }
+    @GetMapping("/admin/editPatient")
+    @PreAuthorize("hasRole('ROLE_ADDMIN')")
+    public String editPatient(Model model, Long id, String keyword, int page){
+        Patient patient= patientRepository.findById(id).orElse(null);
+        if(patient==null) throw new RuntimeException("Patient introuvable");
+        model.addAttribute("patient",patient);
+        model.addAttribute("page",page);
+        model.addAttribute("keyword",keyword);
+        return "editPatient";
+    }
+    @GetMapping("/")
+    public String home(){
+        return "redirect:/user/index";
+    }
 }
